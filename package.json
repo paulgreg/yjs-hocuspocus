@@ -16,14 +16,15 @@
     "@hocuspocus/extension-logger": "^4.0.0",
     "@hocuspocus/extension-sqlite": "^4.0.0",
     "@hocuspocus/server": "^4.0.0",
-    "crossws": "^0.4.5",
+    "@hono/node-server": "^2.0.2",
     "dotenv": "^17.4.2",
-    "express": "^4.21.2",
+    "hono": "^4.12.18",
+    "ws": "^8.17.1",
     "yjs": "^13.6.30"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/node": "^22.13.10",
+    "@types/ws": "^8.5.12",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   },
