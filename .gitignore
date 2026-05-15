@@ -3,3 +3,4 @@ dist
 data
 backup
 .env
+ecosystem.config.cjs
