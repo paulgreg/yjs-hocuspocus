@@ -5,9 +5,12 @@ import { createServer } from 'node:http'
 import crossws from 'crossws/adapters/node'
 import express from 'express'
 import 'dotenv/config'
+import { backupAllDocs } from './extensions/backup.js'
 
-const PORT = process.env.PORT_WS
+const PORT = process.env.PORT
 const SECRET = process.env.SECRET
+const BACKUP_DIR = process.env.BACKUP_DIR
+const BACKUP_INTERVAL = process.env.BACKUP_INTERVAL
 
 if (!PORT) throw new Error('Missing PORT')
 if (!SECRET) throw new Error('Missing SECRET')
@@ -116,3 +119,17 @@ server.on('upgrade', (request, socket, head) => {
 server.listen(Number.parseInt(PORT), () => {
   console.log(`HopusPocus running at http://localhost:${PORT}/`)
 })
+
+if (BACKUP_DIR && BACKUP_INTERVAL) {
+  const backupInterval = Number.parseInt(BACKUP_INTERVAL, 10)
+  if (!Number.isInteger(backupInterval))
+    throw new Error('BACKUP_INTERVAL_MS is not an integer')
+
+  console.info(
+    `backing up documents to "${BACKUP_DIR}" each ${BACKUP_INTERVAL} sec`
+  )
+  setInterval(
+    () => backupAllDocs(hocuspocus, BACKUP_DIR),
+    backupInterval * 1000
+  )
+}
