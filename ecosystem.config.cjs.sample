@@ -6,6 +6,7 @@ module.exports = {
       max_memory_restart: '192M',
       env: {
         PORT: 6011,
+        ORIGIN: "http://127.0.0.1",
         SECRET: "random-string",
         BACKUP_DIR: "./backup",
         BACKUP_INTERVAL: 86400

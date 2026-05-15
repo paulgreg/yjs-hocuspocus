@@ -1,19 +1,23 @@
-import { Hono } from 'hono'
+import { Hono, type Context, type Next } from 'hono'
+import { cors } from 'hono/cors'
 import { WebSocketServer } from 'ws'
 import { serve, upgradeWebSocket } from '@hono/node-server'
 import { Hocuspocus } from '@hocuspocus/server'
 import { SQLite } from '@hocuspocus/extension-sqlite'
 import { Logger } from '@hocuspocus/extension-logger'
 import { backupAllDocs } from './extensions/backup.js'
+import { getDocumentNames, deleteDocument } from './utils/database.js'
 import 'dotenv/config'
 
-const PORT = process.env.PORT
-const SECRET = process.env.SECRET
-const BACKUP_DIR = process.env.BACKUP_DIR
-const BACKUP_INTERVAL = process.env.BACKUP_INTERVAL
+const port = process.env.PORT
+const origin = process.env.ORIGIN
+const secret = process.env.SECRET
+const backupDir = process.env.BACKUP_DIR
+const backupInterval = process.env.BACKUP_INTERVAL
 
-if (!PORT) throw new Error('Missing PORT')
-if (!SECRET) throw new Error('Missing SECRET')
+if (!port) throw new Error('Missing PORT')
+if (!origin) throw new Error('Missing ORIGIN')
+if (!secret) throw new Error('Missing SECRET')
 
 const hocuspocus = new Hocuspocus({
   debounce: 5_000,
@@ -25,18 +29,25 @@ const hocuspocus = new Hocuspocus({
     new Logger(),
   ],
   async onAuthenticate({ token }) {
-    if (!token || token !== SECRET) {
+    if (!token || token !== secret) {
       throw new Error('Unauthorized')
     }
   },
 })
 
 const app = new Hono()
+app.use(
+  '/api/*',
+  cors({
+    origin,
+    allowMethods: ['GET', 'DELETE', 'OPTIONS'],
+  })
+)
 
 // Authentication middleware
-const verifyAuth = (c: any, next: any) => {
+const verifyAuth = (c: Context, next: Next) => {
   const token = c.req.query('secret')
-  if (!token || token !== SECRET) {
+  if (!token || token !== secret) {
     return c.json({ error: 'Unauthorized' }, 401)
   }
   return next()
@@ -74,15 +85,11 @@ app.get(
 app.get('/api/list', verifyAuth, async (c) => {
   try {
     const prefix = c.req.query('prefix')
-    if (!prefix) {
-      return c.json({ error: 'Missing prefix parameter' }, 400)
-    }
 
-    const docs = Array.from(hocuspocus.documents.keys())
-    const filter =
-      prefix === '*' ? docs : docs.filter((name) => name.includes(prefix))
+    // Get documents from database instead of memory
+    const documents = await getDocumentNames(hocuspocus, prefix || undefined)
 
-    return c.json(filter)
+    return c.json(documents)
   } catch (error) {
     console.error('List error:', error)
     return c.json({ error: 'Internal server error' }, 500)
@@ -90,15 +97,25 @@ app.get('/api/list', verifyAuth, async (c) => {
 })
 
 // DELETE /api/delete?doc=<docName> - delete document
-app.delete('/api/delete', verifyAuth, async (c) => {
+app.get('/api/del', verifyAuth, async (c) => {
   try {
     const docName = c.req.query('doc')
     if (!docName) {
       return c.json({ error: 'Missing doc parameter' }, 400)
     }
     console.log(`Deleting document: ${docName}`)
-    hocuspocus.documents.delete(docName)
-    return c.json({ success: true })
+
+    // Delete from database first
+    const deletedFromDb = await deleteDocument(hocuspocus, docName)
+
+    // Delete from memory if it exists
+    const deletedFromMemory = hocuspocus.documents.delete(docName)
+
+    if (deletedFromDb || deletedFromMemory) {
+      return c.json({ success: true, deletedFromDb, deletedFromMemory })
+    } else {
+      return c.json({ error: 'Document not found' }, 404)
+    }
   } catch (error) {
     console.error('Delete error:', error)
     return c.json({ error: 'Internal server error' }, 500)
@@ -108,12 +125,12 @@ app.delete('/api/delete', verifyAuth, async (c) => {
 // Create WebSocket server
 const wss = new WebSocketServer({ noServer: true })
 
-console.log(`HopusPocus running at http://localhost:${PORT}/`)
+console.log(`HopusPocus running at http://127.0.0.1:${port}/`)
 serve(
   {
     fetch: app.fetch,
     websocket: { server: wss },
-    port: Number.parseInt(PORT),
+    port: Number.parseInt(port),
   },
   (info) => {
     hocuspocus.hooks('onListen', {
@@ -124,16 +141,16 @@ serve(
   }
 )
 
-if (BACKUP_DIR && BACKUP_INTERVAL) {
-  const backupInterval = Number.parseInt(BACKUP_INTERVAL, 10)
-  if (!Number.isInteger(backupInterval))
+if (backupDir && backupInterval) {
+  const secBackupInterval = Number.parseInt(backupInterval, 10)
+  if (!Number.isInteger(secBackupInterval))
     throw new Error('BACKUP_INTERVAL_MS is not an integer')
 
   console.info(
-    `backing up documents to "${BACKUP_DIR}" each ${BACKUP_INTERVAL} sec`
+    `backing up documents to "${backupDir}" each ${secBackupInterval} sec`
   )
   setInterval(
-    () => backupAllDocs(hocuspocus, BACKUP_DIR),
-    backupInterval * 1000
+    () => backupAllDocs(hocuspocus, backupDir),
+    secBackupInterval * 1000
   )
 }

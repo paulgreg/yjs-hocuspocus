@@ -1,7 +1,8 @@
 import { Hocuspocus } from '@hocuspocus/server'
 import fs from 'node:fs/promises'
-import path from 'node:path'
+import path from 'path'
 import { yShapeToJSON } from './YShape.js'
+import { getDocumentNames, loadDocumentFromDb } from '../utils/database.js'
 
 export function encodeFileName(fileName: string): string {
   const normalized = fileName.normalize('NFD')
@@ -30,13 +31,27 @@ export async function backupAllDocs(
 ): Promise<void> {
   console.log(new Date(), 'starting backup')
   try {
-    const docs = hocuspocus.documents
-    console.log(docs.size, 'documents found')
-    for (const [_idx, ydoc] of docs.entries()) {
-      const json = yShapeToJSON(ydoc)
-      await saveJsonToFile(backupDir, ydoc.name, json)
+    // Get document names from database instead of memory
+    const docNames = await getDocumentNames(hocuspocus)
+    console.log(docNames.length, 'documents found in database')
+    
+    let successCount = 0
+    let errorCount = 0
+    
+    for (const docName of docNames) {
+      try {
+        // Load document from database
+        const ydoc = await loadDocumentFromDb(hocuspocus, docName)
+        const json = yShapeToJSON(ydoc)
+        await saveJsonToFile(backupDir, docName, json)
+        successCount++
+      } catch (error) {
+        console.error(`Failed to backup document ${docName}:`, error)
+        errorCount++
+      }
     }
-    console.log(new Date(), 'backup ended')
+    
+    console.log(new Date(), `backup ended: ${successCount} succeeded, ${errorCount} failed`)
   } catch (e) {
     console.error('backup failed', e)
   }
