@@ -55,7 +55,7 @@ const verifyAuth = (c: Context, next: Next) => {
 
 // WebSocket endpoint for Hocuspocus
 app.get(
-  '/',
+  '/ws',
   upgradeWebSocket((c) => {
     let clientConnection: any
     return {
