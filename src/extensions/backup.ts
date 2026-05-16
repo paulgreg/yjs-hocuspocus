@@ -1,8 +1,12 @@
 import { Hocuspocus } from '@hocuspocus/server'
 import fs from 'node:fs/promises'
-import path from 'path'
+import path from 'node:path'
 import { yShapeToJSON } from './YShape.js'
-import { getDocumentNames, loadDocumentFromDb } from '../utils/database.js'
+import {
+  getDocumentNames,
+  loadDocumentFromDb,
+  isDocumentEmpty,
+} from '../utils/database.js'
 
 export function encodeFileName(fileName: string): string {
   const normalized = fileName.normalize('NFD')
@@ -25,21 +29,37 @@ export async function saveJsonToFile(
   console.log(`Backed up ${fileName} to ${filePath}`)
 }
 
+/**
+ * Backup all non-empty documents to JSON files
+ * @param hocuspocus Hocuspocus instance
+ * @param backupDir Directory to save backup files
+ * @param cleanupEmptyDocs Whether to cleanup unused empty documents before backup (default: true)
+ */
 export async function backupAllDocs(
   hocuspocus: Hocuspocus,
   backupDir: string
 ): Promise<void> {
   console.log(new Date(), 'starting backup')
   try {
-    // Get document names from database instead of memory
+    // Step 1: Get remaining document names from database
     const docNames = await getDocumentNames(hocuspocus)
-    console.log(docNames.length, 'documents found in database')
-    
+    console.log(`📋 ${docNames.length} documents found in database for backup`)
+
     let successCount = 0
     let errorCount = 0
-    
+    let skipCount = 0
+
+    // Step 2: Backup non-empty documents
     for (const docName of docNames) {
       try {
+        // Check if document is empty and skip it
+        const isEmpty = await isDocumentEmpty(hocuspocus, docName)
+        if (isEmpty) {
+          console.log(`🗑️  Skipping empty document: ${docName}`)
+          skipCount++
+          continue
+        }
+
         // Load document from database
         const ydoc = await loadDocumentFromDb(hocuspocus, docName)
         const json = yShapeToJSON(ydoc)
@@ -50,8 +70,11 @@ export async function backupAllDocs(
         errorCount++
       }
     }
-    
-    console.log(new Date(), `backup ended: ${successCount} succeeded, ${errorCount} failed`)
+
+    console.log(
+      new Date(),
+      `backup ended: ${successCount} succeeded, ${errorCount} failed, ${skipCount} empty documents skipped`
+    )
   } catch (e) {
     console.error('backup failed', e)
   }

@@ -6,7 +6,11 @@ import { Hocuspocus } from '@hocuspocus/server'
 import { SQLite } from '@hocuspocus/extension-sqlite'
 import { Logger } from '@hocuspocus/extension-logger'
 import { backupAllDocs } from './extensions/backup.js'
-import { getDocumentNames, deleteDocument } from './utils/database.js'
+import {
+  getDocumentNames,
+  deleteDocument,
+  cleanupUnusedEmptyDocuments,
+} from './utils/database.js'
 import 'dotenv/config'
 
 const port = process.env.PORT
@@ -149,8 +153,8 @@ if (backupDir && backupInterval) {
   console.info(
     `backing up documents to "${backupDir}" each ${secBackupInterval} sec`
   )
-  setInterval(
-    () => backupAllDocs(hocuspocus, backupDir),
-    secBackupInterval * 1000
-  )
+  setInterval(async () => {
+    await cleanupUnusedEmptyDocuments(hocuspocus)
+    await backupAllDocs(hocuspocus, backupDir)
+  }, secBackupInterval * 1000)
 }
