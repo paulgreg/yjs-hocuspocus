@@ -1,10 +1,17 @@
 # HocusPocus + REST APIs & BACKUP
 
-That is a YJS HocusPocus server with rest API and backup
+That is a YJS HocusPocus server with rest API and backup.
 
-It adds periodic backups to JSON files and a few custom HTTP methods : 
- - /list to list docnument names
- - /del to remove document
+It adds periodic backup/export to JSON files and a few custom REST API endpoinds : 
+ - /api/list to list document names, accepts a prefix to filter doc
+ - /api/del to remove document
+  
+API needs secret parameter.
+
+Exemple : 
+
+    curl http://localhost:6011/api/list\?secret\=random-string\&prefix\=\gl
+
 
 ## configuration
 
